@@ -1,0 +1,488 @@
+ /**
+  * @file logrun.cc
+  * @author garipova.nailya@tgtoil.com
+  * @author Copyright(C) 2012 TGT Oil & Gas Services. All right reserved.
+  */
+
+//#include <cstdio>
+//#include <iostream>
+#include "ctype.h"
+#include "time.h"
+#include <iostream>
+#include <sstream>
+#include <iterator>
+
+#include "ppapi/cpp/instance.h"
+#include "ppapi/cpp/module.h"
+#include "ppapi/cpp/var.h"
+#include "ppapi/cpp/rect.h"
+#include "ppapi/cpp/var_array_buffer.h"
+#include "ppapi/c/ppb_var_array_buffer.h"
+#include "ppapi/c/pp_file_info.h"
+#include "ppapi/c/ppb_file_io.h"
+#include "ppapi/cpp/file_io.h"
+#include "ppapi/cpp/file_ref.h"
+#include "ppapi/cpp/file_system.h"
+#include "ppapi/cpp/completion_callback.h"
+//#include "base64enc2.h"
+#include "base64.h"
+#include "uu.h"
+//#include "XUnzip.h"
+
+
+//#include "las_file/Las.h"
+
+//#include "unzipper_cpp_sve/XZip.h"
+
+
+
+namespace {
+//const int32_t LEFT_LINE = 0;
+//const int32_t INIT_SCALE_WIDTH = 80;
+//const int32_t INIT_COL_WIDTH = 100;
+
+//const int32_t TOP_LINE = 0;
+//const int32_t TOOLBAR_LLINE = TOP_LINE + 30;
+//const int32_t HEADER_LLINE = TOOLBAR_LLINE + 50;
+} // namespace
+
+//	static const std::string base64_chars = 
+//		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+//		"abcdefghijklmnopqrstuvwxyz"
+//		"0123456789+/";
+
+namespace LogRun {
+
+namespace AsyncCallbacks {
+
+     // Callback that is called as a result of pp::FileSystem::Open
+     void FileSystemOpenCallback(void* data, int32_t result) {
+       if (result != PP_OK)
+         return;
+       LRInstance* instLR_ = static_cast<LRInstance*>(data);
+	   //instLR_->PostMessage(pp::Var("We've opened the FS")); //we did
+       instLR_->OpenFile();
+     }
+
+     // Callback that is called as a result of pp::FileIO::Read
+     void ReadCallback(void* data, int32_t bytes_read) {
+	   LRInstance* instLR_ = static_cast<LRInstance*>(data);
+	   if (bytes_read < 0)
+		   instLR_->PostMessage(pp::Var(bytes_read));
+	   //instLR_->PostMessage(pp::Var(bytes_read));
+	   //sleep(60);
+	   //instLR_->PostMessage(pp::Var((int32_t)instLR_->bytes_buffer_.length()));
+       /*if (bytes_read < 0)
+         return; */ // error
+
+       //instLR_->PostMessage(pp::Var("We're at the ReadCallback"));
+	   instLR_->bytes_to_read_ -= bytes_read;
+       if (instLR_->bytes_to_read_ ==  0) {
+         // File has been read to completion.  Parse the bytes to get the scores.
+         //instLR_->SendFile();
+		   //instLR_->FileProcessing();
+	     switch(instLR_->data_format_) {
+			 case 1: //lvz
+				 instLR_->UnzipLVZFile();
+				 break;
+			 case 2: //las
+				 instLR_->ParseLas();
+				 break;
+			 default:
+				 instLR_->PostMessage(pp::Var("Error in data_format_"));
+				 break;
+		 };
+       } else {
+         instLR_->offset_ += bytes_read;
+         instLR_->file_io_->Read(instLR_->offset_,
+                              &instLR_->bytes_buffer_[instLR_->offset_],
+                              instLR_->bytes_to_read_,
+                              pp::CompletionCallback(ReadCallback, instLR_));
+       }
+     }
+
+     // Callback that is called as a result of pp::FileIO::Query
+     /*void QueryCallback(void* data, int32_t result) {
+		 LRInstance* instLR_ = static_cast<LRInstance*>(data);
+		 //instLR_->PostMessage(pp::Var(result));
+		 if ((result != PP_OK)){
+			 instLR_->PostMessage(pp::Var(result));
+			 return;
+		 }
+
+	   instLR_->PostMessage(pp::Var((int32_t)instLR_->file_info_.size));
+       instLR_->bytes_to_read_ = instLR_->file_info_.size;
+       instLR_->offset_ = 0;
+       instLR_->bytes_buffer_.resize(instLR_->bytes_to_read_);
+
+       // Check if there is anything to read.
+       if (instLR_->bytes_to_read_ == 0) {
+         instLR_->file_io_->Read(instLR_->offset_,
+                              &instLR_->bytes_buffer_[0],
+                              instLR_->bytes_to_read_,
+                              pp::CompletionCallback(ReadCallback, instLR_));
+       }
+     }*/
+
+	 void QueryCallback(void* data, int32_t result)
+	 { 
+		LRInstance* instLR_ = static_cast<LRInstance*>(data);
+		if (result != PP_OK)
+			instLR_->PostMessage(pp::Var(result));
+		instLR_->bytes_to_read_ = instLR_->message_contents_.length();
+        instLR_->offset_ = 0;
+		//instLR_->PostMessage(pp::Var((int32_t)instLR_->file_info_.size));
+		instLR_->bytes_buffer_.resize(instLR_->bytes_to_read_);
+		//instLR_->PostMessage(pp::Var((int32_t)instLR_->bytes_to_read_));
+		instLR_->ReadFromFile();
+	 }
+
+	 void FlushCallback(void* data, int32_t) {
+		 LRInstance* instLR_ = static_cast<LRInstance*>(data);
+		 //instLR_->ReadFromFile();
+		 //instLR_->PostMessage(pp::Var("we got here"));
+		 //Don't go to Query, go to ParseLas if data_format_ == las or to UnzipLVZFile. 
+		 instLR_->file_io_->Query(&instLR_->file_info_, pp::CompletionCallback(QueryCallback, instLR_));
+		 //instLR_->UnzipMyFile();
+		}
+	
+	 void WriteCallback(void* data, int32_t bytes_written) {
+		if (bytes_written < 0)
+			return;  // error
+		LRInstance* instLR_ = static_cast<LRInstance*>(data);
+		
+		//instLR_->PostMessage(pp::Var((int32_t)instLR_->offset_)); //made it till here
+		instLR_->offset_ += bytes_written;
+		if (instLR_->offset_ == instLR_->message_contents_.length()) {
+			//instLR_->PostMessage(pp::Var(instLR_->i_test)); //made it till here
+			instLR_->file_io_->Flush(pp::CompletionCallback(FlushCallback, instLR_));
+		} else {
+			// Not all the bytes to be written have been written, so call
+			// pp::FileIO::Write again.
+			instLR_->i_test++;
+			instLR_->file_io_->Write(instLR_->offset_, &instLR_->message_contents_[instLR_->offset_],
+                          instLR_->message_contents_.length() - instLR_->offset_,
+                          pp::CompletionCallback(WriteCallback, instLR_));
+		}
+	}
+
+     // Callback that is called as a result of pp::FileIO::Open
+     void FileOpenCallback(void*data, int32_t result) {
+	   LRInstance* instLR_ = static_cast<LRInstance*>(data);
+       if ((result != PP_OK)) {
+		 //std::string mes1("File IO Open error = ");
+		 //std::string result_str = result;
+		 //mes1.append(result_str);
+		 instLR_->PostMessage(pp::Var("did we open it?"));
+         return;
+       }
+
+	   //instLR_->PostMessage(pp::Var("We've opened the file (callback)")); //we did
+       // Query the file in order to get the file size.
+       //instLR_->file_io_->Query(&instLR_->file_info_, pp::CompletionCallback(QueryCallback,
+                                                                       //instLR_));
+	   instLR_->SaveTempFile();
+     }
+
+
+
+}//namespace AsyncCallbacks
+
+
+/// The Instance class.  One of these exists for each instance of your NaCl
+/// module on the web page.  The browser will ask the Module object to create
+/// a new Instance for each occurence of the <embed> tag that has these
+/// attributes:
+///     type="application/x-nacl"
+///     src="hello_tutorial.nmf"
+/// To communicate with the browser, you must override HandleMessage() for
+/// receiving messages from the browser, and use PostMessage() to send messages
+/// back to the browser.  Note that this interface is asynchronous.
+
+LRInstance::LRInstance(PP_Instance instance)
+        : pp::Instance(instance),
+        file_io_(NULL),
+        file_ref_(NULL),
+        file_system_(NULL),
+        //file_name_(NULL),
+		//data_format_(NULL),
+		las_(),
+		//veholder_(),
+		view_(NULL) {
+        //nothing yet
+    }
+LRInstance::~LRInstance() {
+        //destruction events
+		//delete veholder_;
+		//delete view_;
+        file_io_->Close();
+        delete file_io_;
+        delete file_ref_;
+        delete file_system_;
+    }
+  /// Handler for messages coming in from the browser via postMessage().  The
+  /// @a var_message can contain anything: a JSON string; a string that encodes
+  /// method names and arguments; etc.  For example, you could use
+  /// JSON.stringify in the browser to create a message that contains a method
+  /// name and some parameters, something like this:
+  ///   var json_message = JSON.stringify({ "myMethod" : "3.14159" });
+  ///   nacl_module.postMessage(json_message);
+  /// On receipt of this message in @a var_message, you could parse the JSON to
+  /// retrieve the method name, match it to a function call, and then call it
+  /// with the parameter.
+  /// @param[in] var_message The message posted by the browser.
+
+bool LRInstance::Init(uint32_t argc, const char* argn[], const char* argv[]) {
+
+
+	//int32_t rv = file_system_->Open(
+      //1024, pp::CompletionCallback(AsyncCallbacks::FileSystemOpenCallback, this));
+	//if (rv != PP_OK_COMPLETIONPENDING) {
+		//PostMessage(pp::Var("ERROR: Could not open local persistent file system."));
+		//return true;
+	//}
+	
+	return true;
+}
+
+/*void LRInstance::DidChangeView(const pp::Rect& position,
+                         const pp::Rect& clip) {
+  //PostMessage(pp::Var("here we are"));
+  pp::Size view_size = view_->GetSize();
+
+  const bool view_was_empty = view_size.IsEmpty();
+  //view_->UpdateView(position, clip, this);
+  if (view_was_empty) {
+	view_->UpdateView(position, clip, this);
+	view_->Draw();
+  }
+    //ResetPositions();
+    //UpdateScoreDisplay();
+      //view_->Draw();
+}*/
+
+  void LRInstance::HandleMessage(const pp::Var& var_message) {
+
+
+	//if (!var_message.is_array_buffer())
+      //return;
+	//int i;
+	//std::vector<unsigned char> out_cont_;
+	std::string message = var_message.AsString(); //here we have a binary string
+	//std::stringstream mes_stream_(message_contents_);
+	//std::stringstream out_stream_(out_cont_);
+	//std::istream_iterator<std::string> begin(mes_stream_);
+	//std::istream_iterator<std::string> end;
+	//std::ostream_iterator<std::vector>(ofs)
+
+	//out_cont_.reserve(1024*1024*1024);
+	//view_ = new View(this);
+	//view = new pp::View();
+	//data::las::las_t las_;
+
+	//Init variable width fields
+	scale_width_=100;
+	columns_width_=120;
+	header_height_ = 80;
+	//columns_height_;
+	//Init viewer class
+    //view_ = new View(this);
+	//veholder_ = new VEHolder();
+	//Init borders of interface coordinates
+	//InitBorderCoordinates();
+    file_name_ = "/lvz_temp";
+    file_system_ = new pp::FileSystem(this, PP_FILESYSTEMTYPE_LOCALTEMPORARY);
+    file_ref_ = new pp::FileRef(*file_system_, file_name_.c_str());
+
+
+	/*base64::decode(message.begin(), 
+					message.end(), 
+					std::back_inserter(message_contents_));*/
+
+	/*After decoding we can have 2 types of contents:
+		.las file - begins with "# " or "~"
+		.lvz file - an archive, begins with "PK"
+	*/	
+	//PostMessage(pp::Var(message_contents_.substr(0,8)));
+	/*mes_len_ = message_contents_.length();
+	std::string beginning = message_contents_.substr(0, 2);
+	if (beginning == "PK") {
+		data_format_ = 1; //lvz
+		//PostMessage(pp::Var("LVZ"));
+	} else 
+		if ((beginning == "# ") || (beginning == "~V")) {
+			data_format_ = 2; //las
+			//PostMessage(pp::Var("LAS"));
+		} else PostMessage(pp::Var("File format identification error"));
+	
+
+	int32_t rv = file_system_->Open(
+      1024, pp::CompletionCallback(AsyncCallbacks::FileSystemOpenCallback, this));
+	if (rv != PP_OK_COMPLETIONPENDING) {
+		PostMessage(pp::Var("ERROR: Could not open local persistent file system."));
+		//return true;
+	}*/
+  }
+
+  /*void LRInstance::InitBorderCoordinates() {
+	  hborder_coords_.push_back(0);
+	  hborder_coords_.push_back(30);
+	  hborder_coords_.push_back(80);
+	  //view_->set_hborder_coords_(hborder_coords_);
+	  vborder_coords_.push_back(0);
+	  vborder_coords_.push_back(80);
+	  //view_->set_vborder_coords_(vborder_coords_);
+  }*/
+
+  void LRInstance::OpenFile() {
+	    file_io_ = new pp::FileIO(this);
+		file_io_->Open(*file_ref_,
+                 PP_FILEOPENFLAG_READ | PP_FILEOPENFLAG_WRITE |
+                 PP_FILEOPENFLAG_CREATE,
+                 pp::CompletionCallback(AsyncCallbacks::FileOpenCallback,
+                                        this));
+  }
+
+  void LRInstance::SaveTempFile() {
+	  if (file_io_ == NULL) {
+            PostMessage(pp::Var("Could not read the file"));
+            return;
+        };
+	  //const char* lorem = "Lorem Ipsum";
+	  //PostMessage(pp::Var((int32_t)message_contents_.length()));
+	  int32_t rv = file_io_->Write((int64_t)0, &message_contents_[0], (int32_t)message_contents_.length(), 
+							pp::CompletionCallback(AsyncCallbacks::WriteCallback, this));
+	  if (rv != PP_OK_COMPLETIONPENDING) {
+		PostMessage(pp::Var("ERROR: Could not write to a file."));
+		}
+	}
+
+  void LRInstance::ReadFromFile() {
+      //file_io_ = new pp::FileIO(this);
+	  //PostMessage(pp::Var(file_ref_->GetPath())); //fileref still seems ok
+	  //char* read_here;
+      int32_t rv = file_io_->Read((int64_t)0, &bytes_buffer_[0], (int32_t)11, 
+			pp::CompletionCallback(AsyncCallbacks::ReadCallback, this));
+	  if (rv != PP_OK_COMPLETIONPENDING) {
+		PostMessage(pp::Var("ERROR: Could not read a file."));
+	  }
+	  //test_message_ = (std::string)read_here;
+  }
+
+   void LRInstance::SendFile() {
+        //
+        if (file_io_ == NULL) {
+            //
+            PostMessage(pp::Var("Could not read the file"));
+            return;
+        };
+		PostMessage(pp::Var("We've got to the SendFile()"));
+        PostMessage(pp::Var(this->bytes_buffer_));
+   }
+
+   //void LRInstance::FileProcessing() {}
+
+   void LRInstance::ParseLas() {
+   
+	   //data::las::las_t las_;
+
+	   char const marker = 0;
+
+	   char* s = read_las(las_, bytes_buffer_, &marker);
+	   PostMessage(pp::Var(std::string(s)));
+
+	   DisplayLas();
+		   
+   }
+
+   void LRInstance::DisplayLas(){
+	   //first: 
+	   //pp::Rect* position_ = view_.GetRect();
+	   //pp::Rect* clip_ = view_.GetClipRect();
+
+	   //view_->UpdateView(&position_, &clip_);
+	   
+	   //pp::Rect testRect = pp::Rect::Rect(0, 31, 80, 50);
+	   //view_->UpdateSmallView(testRect, this);
+	   //view_->DrawLas();
+	   //pp::Size size_ = view_->GetSize();
+	   
+	   //veholder_ = new VEHolder(/*widths*/scale_width_, columns_width_, (int32_t)size_.width(),
+		//						/*heights*/header_height_, (int32_t)size_.height());
+
+	   //PostMessage(pp::Var("here is fine"));
+	   //int gotit = veholder_->getImageDataLas(&las_); //it crashes here
+
+	   //PostMessage(pp::Var((int32_t)gotit));
+
+	   data::las::logs_section_t& logs = las_.logs_section();
+	   data::las::logs_section_t::logs_list_t logs_list_ = logs.logs_list();
+
+	   PostMessage(pp::Var((int32_t)logs_list_.size()));
+
+	   //PostMessage(pp::Var((int32_t)veholder_->column_list_.size()));
+
+	   //int result = view_->DrawLas(veholder_);
+	   
+	   //PostMessage(pp::Var((int32_t)result));
+
+	   //PostMessage(pp::Var((int32_t)size_.width()));
+   }
+
+   void LRInstance::UnzipLVZFile() { //just parse and display las file at the moment. refactor later
+		
+	   /*data::las::las_t las_;
+
+	   char const marker = 0;
+
+	   if (!read_las(las_, file_name_, &marker))
+	       PostMessage(pp::Var("Not read_las"));*/
+
+
+
+	   /*if (view_->Draw(view->GetRect(), this))
+	   {
+		   
+
+		   //PostMessage(pp::Var("true")); //got true
+	   }
+	   else
+		   PostMessage(pp::Var("false"));*/
+	    
+   }
+
+   char* LRInstance::read_las(data::las::las_t& las, std::string is, char const* marker = 0) {
+
+       readers::LasReader rdr(las);
+
+       char* state = !marker ? rdr.read(is/*, &vbuf_*/) : rdr.read(is, /*&vbuf_,*/ marker);
+       return state;
+   }
+
+  //
+
+ 
+class LogRunModule : public pp::Module {
+ public:
+  LogRunModule() : pp::Module() {}
+  virtual ~LogRunModule() {}
+
+  /// Create and return a HelloTutorialInstance object.
+  /// @param[in] instance The browser-side instance.
+  /// @return the plugin-side instance.
+  virtual pp::Instance* CreateInstance(PP_Instance instance) {
+	  return new LogRun::LRInstance(instance);
+  }
+};
+} //namespace LogRun
+
+namespace pp {
+/// Factory function called by the browser when the module is first loaded.
+/// The browser keeps a singleton of this module.  It calls the
+/// CreateInstance() method on the object you return to make instances.  There
+/// is one instance per <embed> tag on the page.  This is the main binding
+/// point for your NaCl module with the browser.
+Module* CreateModule() {
+	return new LogRun::LogRunModule();
+}
+}  // namespace pp

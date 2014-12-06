@@ -1,0 +1,10 @@
+[8792,5760:10:14:55.926000] NaClErrorLogHookInit: entered
+[8792,5760:10:14:55.926000] BYPASSING ALL ACL CHECKS
+[8792,5760:10:14:55.926000] NaClPatchWindowsExceptionDispatcherWithCheck: Got instructions expected for Windows Vista and Windows 7
+[8792,5760:10:14:55.939000] NaClPerfCounterInterval(SelMain __start__:SnapshotBlob): 13150 microsecs
+sel_main: No such file or directory
+DEBUG MODE ENABLED (bypass acl)
+DEBUG MODE ENABLED (ignore validator)
+sel_ldr argument list:
+C:\Python27\pepper_22/tools/sel_ldr_x86_64 -a -c -B C:\Python27\pepper_22/tools/irt_core_x86_64.nexe -- glibc\lib64\runnable-ld.so --library-path glibc\lib64 glibc/base64_x86_64.nexe
+Cannot open "glibc\lib64\runnable-ld.so".

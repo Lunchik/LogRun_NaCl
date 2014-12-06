@@ -1,0 +1,4 @@
+
+C:\Python27\pepper_22\examples\base64_example1>set LIBS=glibc\lib64 
+
+C:\Python27\pepper_22\examples\base64_example1>C:\Python27\pepper_22/tools/sel_ldr_x86_64 -a -c -B C:\Python27\pepper_22/tools/irt_core_x86_64.nexe -- glibc\lib64\runnable-ld.so --library-path glibc\lib64 glibc/base64_x86_64.nexe 

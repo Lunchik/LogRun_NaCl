@@ -1,0 +1,1 @@
+%NACL_SDK_ROOT%/tools/sel_ldr_x86_64 -a -c  -- %NACL_SDK_ROOT%/toolchain/win_x86_glibc/x86_64-nacl/lib/runnable-ld.so --library-path %NACL_SDK_ROOT%/toolchain/win_x86_glibc/x86_64-nacl/lib %1%

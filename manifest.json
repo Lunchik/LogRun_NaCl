@@ -1,0 +1,32 @@
+{
+    "name": "LogRUN Testing Extension_Pep22",
+    "version": "1.0",
+    "manifest_version": 2,
+    "description": "Handling events between module and webapp",
+    "intents": {
+        "http://drive.google.com/intents/opendrivedoc": [
+            {
+                "type": ["application/vnd.google.drive.ext-type.lvz"],
+                "href": "logrun.html",
+                "title" : "LogRun",
+                "disposition" : "window"
+            }
+        ]
+    },
+    "nacl_modules" : [{
+        "path": "glibc/logrun.nmf",
+        "mime_type": "application/vnd.google.drive.ext-type.lvz"
+    }],
+    "icons" : {
+        "16" : "lvz.jpg",
+        "128" : "lvz1.jpg"
+    },
+    "app" : {
+
+        "launch" : {
+            "local_path" : "logrun.html"
+        }
+    },
+    "permissions": [
+    ]
+}
